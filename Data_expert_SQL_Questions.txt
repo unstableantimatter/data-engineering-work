@@ -1,0 +1,598 @@
+-- EASY -- 
+
+Question 1
+
+SELECT * 
+FROM playground.suspect
+WHERE LENGTH(surname) = 5
+AND height < 171
+AND name LIKE 'B%' OR name like 'b%'
+AND surname LIKE 'Gre%n'
+
+
+Question 2
+
+WITH t AS 
+  (
+  SELECT DISTINCT *
+  FROM playground.views
+  ),  
+  s AS
+  (
+  SELECT viewer_id, COUNT(viewer_id) AS flag
+  FROM t
+  GROUP BY viewer_id
+  )
+SELECT viewer_id
+FROM s
+WHERE flag = 2
+ORDER BY viewer_id ASC
+
+
+Question 3
+
+SELECT id,
+CASE
+  WHEN given_answer is NULL THEN 'no answer'
+  WHEN correct_answer = given_answer THEN 'correct'
+  ELSE 'incorrect' END AS checks
+FROM playground.answers
+
+
+Question 4
+
+SELECT month, SUM(births) as total_births
+FROM playground.us_birth_stats 
+GROUP BY month
+ORDER BY SUM(births) DESC
+LIMIT 1
+
+
+Question 5
+
+WITH T AS (SELECT name, birthday,
+CASE
+  WHEN gender = 'M' THEN 'King'
+  ELSE 'Queen' END AS successor
+FROM playground.successors
+  ORDER BY birthday ASC)
+
+SELECT CONCAT_WS(' ',successor, name) AS name, birthday
+FROM T
+ORDER BY birthday ASC
+
+
+Question 6
+
+SELECT * 
+FROM playground.students
+INNER JOIN playground.clubs
+ON club_id = clubs.id
+ORDER BY playground.students.id asc
+
+## Both tables must have an ID to match on -- null rows dropped
+
+
+QUESTION 7
+
+SELECT customer_id, customer_name, COUNT(order_id) as order_count
+FROM playground.superstore
+GROUP BY customer_id, customer_name
+HAVING COUNT(order_id) > 20
+ORDER BY 3 DESC, 2 ASC
+
+
+QUESTION 8
+
+SELECT dep_name
+FROM playground.departments
+WHERE NOT EXISTS 
+  (SELECT department
+  FROM playground.employees
+  WHERE playground.employees.department =   playground.departments.id)
+  
+
+QUESTION 9
+
+WITH t AS (
+  SELECT *,
+  ROW_NUMBER() OVER (PARTITION BY id ORDER BY rev DESC) AS row_number
+  FROM playground.revenue
+)
+SELECT *
+FROM t
+WHERE row_number = 1
+ORDER BY rev DESC
+
+
+QUESTION 10
+
+
+QUESTION 11 -- Note: Got correct answer just from filtering the rentals table by US and rental date feb 1
+
+WITH r AS (
+  SELECT user_id, rental_id 
+  FROM playground.rental
+  WHERE country = 'US' AND 
+  rental_date = DATE('2023-02-01')
+  ORDER BY user_id ASC
+  ),
+  s AS (
+  SELECT user_id, rental_id
+  FROM playground.streams
+  WHERE country = 'US' 
+  AND stream_date BETWEEN DATE('2023-02-02') AND DATE('2023-02-08')
+  )
+SELECT r.user_id, r.rental_id
+FROM r 
+JOIN s 
+ON r.rental_id = s.rental_id
+ORDER BY user_id asc
+
+
+QUESTION 12
+
+SELECT YEAR(order_date) AS order_year, ROUND(SUM(CAST(profit AS DOUBLE)), 2) AS total_profit
+FROM playground.superstore
+GROUP BY YEAR(order_date)
+ORDER BY 1 desc
+
+
+QUESTION 13
+
+SELECT brand_name, fuel_type, engine_size 
+FROM playground.automobile
+WHERE engine_size >= (Select AVG(engine_size) FROM playground.automobile)
+ORDER BY 3 desc, 1 asc
+
+
+QUESTION 14 - Note: Request question wording update to include round to whole number.
+
+SELECT day_of_week, ROUND(AVG(CAST(births AS INT))) AS average_births
+FROM playground.us_birth_stats
+GROUP BY day_of_week
+ORDER BY day_of_week asc
+
+
+Question 15 - Note: Query returns correct answer without any consideration for highest helpful_votes
+
+WITH t AS (
+  SELECT product_id, customer_id, review_score, helpful_votes, ROW_NUMBER() OVER (PARTITION BY product_id ORDER BY review_score DESC) as row_number
+  FROM playground.product_reviews
+  )
+SELECT product_id, customer_id, review_score, helpful_votes
+FROM t
+WHERE row_number = 1
+
+-- MEDIUM -- 
+
+
+QUESTION 16 -- Overthought this a lot - Used a subquery in the WHERE clause
+
+SELECT state, percent_alcohol_impaired
+FROM playground.bad_drivers
+WHERE percent_alcohol_impaired > (SELECT AVG(percent_alcohol_impaired * 1.2) FROM playground.bad_drivers)
+GROUP BY state, 2
+ORDER BY 2 DESC
+
+
+QUESTION 17 --  NOT COMPLETE -- Cleans alpha chars and commas, but missing some values now.
+
+SELECT DISTINCT(author), TRY_CAST(regexp_replace(no_of_reviews, '[a-zA-Z,]+', '')AS INT) as number_of_reviews  
+  FROM bootcamp.books
+  GROUP BY author, no_of_reviews
+  ORDER BY 2 DESC
+  LIMIT 10
+  
+  
+QUESTION 18? -- Comparing State Fatal Collisions
+
+SELECT state, fatal_collisions_per_billion_miles,
+CASE
+  WHEN fatal_collisions_per_billion_miles > (SELECT AVG(fatal_collisions_per_billion_miles)
+FROM playground.bad_drivers) THEN 'Above Average'
+  ELSE 'Below Average' END AS comparison_to_national_avg
+FROM playground.bad_drivers
+ORDER BY state ASC
+
+ 
+QUESTION 19 -- Identifying students with the best grade
+
+WITH t AS
+(
+  SELECT *, (midterm1 * .25 + midterm2 * .25 + final * .5) AS method1, (midterm1 * .5 + midterm2 * .5)AS method2, final AS method3
+  FROM playground.marks
+)
+SELECT name, id
+FROM t
+WHERE method3 > method1 AND method3 > method2
+ORDER BY name asc
+
+ 
+
+
+QUESTION 19 --  Qualifying criteria for highest and lowest was confusing here. We are just looking for the SUM(highest) and SUM(lowest) salaries and the difference between the 2, 
+  
+WITH t AS
+  (
+  SELECT *, 
+DENSE_RANK() OVER(ORDER BY salary DESC) AS dense_rank
+  FROM playground.employees_salary
+  ), r AS
+  (
+  SELECT 
+    SUM(CASE
+      WHEN dense_rank > 1 THEN salary
+      ELSE 0
+    END) AS lowest,
+    SUM(CASE
+      WHEN dense_rank <= 1 THEN salary
+      ELSE 0
+      END) AS highest
+  FROM t
+  )
+SELECT ABS(highest - lowest) AS difference
+FROM r
+
+#### Provided answer ####
+
+SELECT (maxs - mins) AS difference
+FROM (
+    SELECT SUM(salary) as mins
+    FROM playground.employees_salary
+    WHERE salary = (SELECT MIN(salary) FROM playground.employees_salary)
+) AS t1,
+(
+    SELECT SUM(salary) as maxs
+    FROM playground.employees_salary
+    WHERE salary = (SELECT MAX(salary) FROM playground.employees_salary)
+) AS t2
+
+
+  
+QUESTION 20
+
+WITH t AS 
+  (
+  SELECT *, 
+ROW_NUMBER() OVER (PARTITION BY product_id ORDER BY change_date DESC) AS row_number
+  FROM playground.product_prices
+  WHERE change_date <= DATE('2023-08-17') 
+  ), r AS
+  (
+  SELECT mattdamour.x.product_id, t.new_price, change_date, d_price, row_number
+  FROM mattdamour.x
+  LEFT JOIN t ON mattdamour.x.product_id = t.product_id
+  WHERE row_number = 1 OR row_number IS NULL
+  )
+SELECT DISTINCT product_id,
+CASE
+  WHEN new_price IS NULL THEN (10)
+  ELSE new_price
+END AS price
+FROM r
+ORDER BY product_id ASC
+
+
+Question 21 -- Filtering Dance Contest Scores
+
+WITH t AS 
+(
+  SELECT *, 
+  CASE
+    WHEN first_criterion = (SELECT MIN(first_criterion) FROM playground.dance_scores) OR first_criterion = (SELECT MAX(first_criterion) FROM playground.dance_scores) THEN 1
+    ELSE 0
+  END AS xone,
+  CASE
+    WHEN second_criterion = (SELECT MIN(second_criterion) FROM playground.dance_scores) OR second_criterion = (SELECT MAX(second_criterion) FROM playground.dance_scores) THEN 1
+    ELSE 0
+  END AS xtwo,
+  CASE
+    WHEN third_criterion = (SELECT MIN(third_criterion) FROM playground.dance_scores) OR third_criterion = (SELECT MAX(third_criterion) FROM playground.dance_scores) THEN 1
+    ELSE 0
+  END as xthree
+  FROM playground.dance_scores
+), s AS
+(
+  SELECT arbiter_id, first_criterion, second_criterion, third_criterion, xone + xtwo + xthree AS final
+  FROM t
+)
+SELECT arbiter_id, first_criterion, second_criterion, third_criterion
+FROM s
+WHERE final < 2
+ORDER BY arbiter_id
+  
+  
+QUESTION -- 22
+ 
+WITH t AS (
+  SELECT *
+  FROM playground.movies
+  WHERE genre = (
+    SELECT genre
+    FROM playground.movies
+    GROUP BY genre
+    ORDER BY COUNT(*) DESC
+    LIMIT 1
+  )
+), r AS (
+  SELECT movie_name, actor
+  FROM playground.starring_actors
+  RIGHT JOIN t
+  ON playground.starring_actors.movie_name = t.movie
+)
+SELECT r.actor, playground.actor_ages.age
+FROM r
+INNER JOIN playground.actor_ages
+ON r.actor = playground.actor_ages.actor
+ORDER BY age desc, actor
+
+
+
+
+Question -- 24 -- Summarizing Foreign Competitors by Country with Total Summary
+  
+SELECT country, COUNT(competitor) AS competitors
+FROM playground.foreign_competitors
+GROUP BY country
+UNION ALL
+SELECT 'Total:' AS country, COUNT(*) AS competitors
+FROM playground.foreign_competitors
+ORDER BY competitors asc, country asc
+
+
+QUESTION 25
+
+WITH t AS
+  (
+  SELECT student_id, course_id, grade,
+ROW_NUMBER() OVER (PARTITION BY student_id ORDER BY grade DESC) as row_number
+  FROM playground.student_grades
+  )
+SELECT student_id, course_id, grade
+FROM t
+WHERE row_number = 1
+ORDER BY student_id ASC  
+  
+  
+QUESTION 26 - Wording is a little fucky here customer and sales, but should prob be customer and purchase
+
+WITH t AS 
+  (
+  SELECT DISTINCT(id), month,
+  SUM(sales) OVER (PARTITION BY id) as total_sales
+  FROM playground.sales
+  ), r AS
+  (
+  SELECT id, month, total_sales,
+  ROW_NUMBER() OVER (PARTITION BY month ORDER BY total_sales DESC) as row_number
+  FROM t
+  )
+SELECT id, month, total_sales, row_number AS rank
+FROM r
+WHERE row_number = 1 OR row_number = 2
+
+
+QUESTION 29
+
+WITH t AS
+  (
+  SELECT product_id, sale_date
+  FROM playground.product_sales
+  WHERE EXTRACT(MONTH from sale_date) = 1 
+  AND product_id NOT IN (
+    SELECT product_id
+    FROM playground.product_sales 
+    WHERE EXTRACT(MONTH FROM sale_date) != 1)
+  GROUP BY product_id, sale_date
+  )
+SELECT t.product_id, playground.products.product_name
+FROM t
+INNER JOIN playground.products
+ON playground.products.product_id = t.product_id
+
+
+
+QUESTION 31 --  Calculating Available Seats on Flights
+
+CREATE TABLE mattdamour.x AS SELECT * FROM playground.flights
+
+CREATE TABLE mattdamour.y AS SELECT * FROM playground.planes
+
+CREATE TABLE mattdamour.z AS 
+SELECT flight_id, COUNT(*) AS purchased_seats
+FROM mattdamour.z
+GROUP BY flight_id
+
+
+WITH t AS 
+(
+  SELECT DISTINCT x.flight_id, x.plane_id, y.number_of_seats, z.purchased_seats
+  FROM mattdamour.x
+  JOIN mattdamour.y ON y.plane_id = x.plane_id
+  LEFT JOIN mattdamour.z ON z.flight_id = x.flight_id
+)
+SELECT flight_id, 
+CASE
+  WHEN purchased_seats IS NOT NULL THEN number_of_seats - purchased_seats 
+  WHEN purchased_seats IS NULL THEN number_of_seats
+END AS free_seats
+FROM t
+ORDER BY flight_id ASC
+
+
+
+
+QUESTION 32 -- data doesnt require computation to come up with the average, only 1 value per product / month
+
+WITH t AS
+  (
+  SELECT product_id, MONTH(review_date) as month, review_score
+  FROM playground.product_reviews
+  )
+SELECT month, product_id, AVG(review_score) AS avg_review
+FROM t
+GROUP BY month, product_id
+ORDER BY month ASC, product_id ASC
+
+
+
+QUESTION 33
+
+WITH t AS
+  (
+  SELECT fuel_type, ROUND(AVG(city_mileage), 2) AS avg_city_mileage, ROUND(AVG(highway_mileage), 2) AS avg_highway_mileage
+  FROM playground.automobile
+  GROUP BY fuel_type
+  )
+SELECT fuel_type, avg_city_mileage, avg_highway_mileage, ROUND((avg_highway_mileage / avg_city_mileage),2) AS efficiency_ratio
+FROM t
+ORDER BY efficiency_ratio DESC
+
+QUESTION 34
+
+WITH t AS 
+  (
+  SELECT fuel_type, fuel_system, COUNT(*) AS total_cars
+  FROM playground.automobile
+  GROUP BY fuel_type, fuel_system
+  ORDER BY fuel_type ASC
+  ), 
+  r AS
+  (
+  SELECT *, 
+ROW_NUMBER() OVER (PARTITION BY fuel_type ORDER BY total_cars DESC) as row_number
+  FROM t
+  )
+SELECT * FROM r WHERE row_number = 1
+
+
+QUESTION 35 -- Shipping types and lead times
+
+-- Lead time
+WITH lead_time AS
+(
+  SELECT ship_mode, ROUND(AVG(DATE_DIFF('day', order_date, ship_date)),2) AS avg_lead_time
+  FROM mattdamour.superstore
+  GROUP BY ship_mode
+), sm_count AS 
+(
+-- Total count ship_modes
+SELECT ship_mode, COUNT(*) AS tot_ship_mode
+FROM mattdamour.superstore
+GROUP BY ship_mode
+)
+
+SELECT lead_time.ship_mode, sm_count.tot_ship_mode AS total_shipping_service, lead_time.avg_lead_time
+FROM lead_time
+FULL OUTER JOIN sm_count
+ON lead_time.ship_mode = sm_count.ship_mode
+ORDER BY ship_mode desc
+
+
+#####   HARD QUESTIONS  #####
+
+QUESTION 36
+
+
+
+QUESTION 37
+
+
+
+QUESTION 38
+
+
+
+QUESTION 39 -- Countries and Their Preferences for Beer, Spirit, and Wine
+
+WITH t AS
+(
+  SELECT country,
+    CASE
+      WHEN spirit_servings >= beer_servings AND spirit_servings >= wine_servings THEN 'Spirit'
+      WHEN wine_servings >= beer_servings AND wine_servings >= spirit_servings THEN 'Wine'
+      WHEN beer_servings >= spirit_servings AND beer_servings >= wine_servings THEN 'Beer'
+    END AS preferred_drink
+  FROM playground.drinks
+  WHERE total_litres_of_pure_alcohol != 0
+)
+SELECT *
+FROM t
+WHERE preferred_drink = 'Spirit' OR preferred_drink = 'Wine'
+ORDER BY country
+
+
+
+QUESTION 40
+
+
+
+QUESTION 41 -- Most Frequently Purchased Sub-Category in Each Region
+
+WITH t AS
+(
+  SELECT region, sub_category, COUNT(*) AS purchase_count
+  FROM playground.superstore
+  GROUP BY region, sub_category
+  ORDER BY purchase_count DESC
+), s AS
+(
+SELECT region, sub_category, purchase_count,
+ROW_NUMBER() OVER (PARTITION BY region ORDER BY purchase_count DESC) AS row_number
+FROM t
+)
+SELECT *
+FROM s
+WHERE row_number = 1
+ORDER BY region ASC
+
+
+
+
+
+CREATE TABLE mattdamour.bug AS
+SELECT * FROM playground.bug 
+CREATE TABLE mattdamour.component AS
+SELECT * FROM playground.component
+
+
+
+
+WITH t AS
+(
+SELECT bug_num, component_id, 
+ROW_NUMBER() OVER (PARTITION BY bug_num) AS row_number
+FROM playground.bug_component
+), combined AS
+(
+SELECT bug_num, component_id
+FROM t
+WHERE row_number = 2
+)
+SELECT B.title, C.title, 
+FROM combined A
+JOIN mattdamour.bug B ON A.bug_num = B.num
+JOIN mattdamour.component C ON A.component_id = C.id
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ADDITIONAL NOTES:
+
+CREATE TABLE mattdamour.x AS SELECT DISTINCT product_id FROM playground.product_prices ORDER BY product_id ASC
+
+DROP TABLE mattdamour.x
